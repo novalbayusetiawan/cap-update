@@ -20,6 +20,3 @@ android/local.properties
 # iOS
 ios/Pods/
 ios/.build/
-
-# Example app
-example-app/

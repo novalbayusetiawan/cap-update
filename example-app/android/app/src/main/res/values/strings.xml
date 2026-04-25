@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cap Update Example</string>
+    <string name="title_activity_main">Cap Update Example</string>
+    <string name="package_name">dev.novals.capupdate.example</string>
+    <string name="custom_url_scheme">dev.novals.capupdate.example</string>
+</resources>
