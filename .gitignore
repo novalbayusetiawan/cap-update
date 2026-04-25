@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Android
+android/.gradle/
+android/build/
+android/local.properties
+
+# iOS
+ios/Pods/
+ios/.build/
+
+# Example app
+example-app/
