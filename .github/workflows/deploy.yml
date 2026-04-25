@@ -1,0 +1,33 @@
+name: Deploy Live Update
+on:
+  push:
+    branches:
+      - native
+jobs:
+  upload-file:
+    runs-on: ubuntu-latest
+    env:
+      # Add your environment variables here
+      NODE_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+      - name: Clean and install dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Build web assets
+        run: pnpm run build
+      - name: Upload Live Update
+        run: |
+          npx laracap-cli apps:bundles:create \
+            --path ${{ github.workspace }}/example-app/dist \
+            --server https://laracap.dev \
+            --token "${{ secrets.LARACAP_TOKEN }}" \
+            --app-id 019db3fe-d545-7c8c-aa13-26f647903164 \
+            --name "${{ github.ref }}" \
+            --channel production
