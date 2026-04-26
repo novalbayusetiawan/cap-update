@@ -167,7 +167,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="container">
     <header>
       <div class="header-icon">⚡</div>
-      <h1>Cap Update</h1>
+      <h1>Cap Update v1.0</h1>
       <p class="subtitle">Live OTA Bundle Manager</p>
     </header>
 
