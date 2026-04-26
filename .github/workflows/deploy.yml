@@ -31,5 +31,5 @@ jobs:
             --server "${{ secrets.LARACAP_SERVER_URL }}" \
             --token "${{ secrets.LARACAP_TOKEN }}" \
             --app-id 019dc873-ec06-7274-a7ee-59afd76c88e3 \
-            --name "${{ github.ref }}" \
+            --name "${{ github.event.head_commit.message }}" \
             --channel beta

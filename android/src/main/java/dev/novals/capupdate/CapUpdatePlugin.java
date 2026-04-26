@@ -20,6 +20,10 @@ public class CapUpdatePlugin extends Plugin {
     private static final String KEY_ACTIVE_BUNDLE = "active_bundle_id";
     private static final String KEY_ACTIVE_PATH = "active_bundle_path";
 
+    // Capacitor's built-in preferences for the WebView
+    private static final String CAP_WEBVIEW_PREFS = "CapWebViewSettings";
+    private static final String CAP_SERVER_PATH = "serverBasePath";
+
     private BundleManager bundleManager;
 
     @Override
@@ -27,25 +31,28 @@ public class CapUpdatePlugin extends Plugin {
         super.load();
         bundleManager = new BundleManager(getContext());
 
-        // Restore persisted bundle on app startup.
-        // This runs BEFORE the WebView loads its initial URL,
-        // so setServerBasePath takes effect for the first page load.
+        // Capacitor natively handles restoring the server path from CapWebViewSettings.
+        // We only need to check if our bundle is still valid, and if not, clear it.
         String persistedPath = getPrefs().getString(KEY_ACTIVE_PATH, null);
         String persistedBundle = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
 
         if (persistedPath != null && persistedBundle != null) {
             File dir = new File(persistedPath);
-            if (dir.exists() && dir.isDirectory()) {
-                getBridge().setServerBasePath(persistedPath);
-            } else {
-                // Bundle directory was deleted externally — clear stale prefs
+            if (!dir.exists() || !dir.isDirectory()) {
+                android.util.Log.w("CapUpdate", "Bundle path missing on startup: " + persistedPath);
                 clearActiveBundle();
+            } else {
+                android.util.Log.d("CapUpdate", "Active bundle on startup: " + persistedBundle);
             }
         }
     }
 
     private SharedPreferences getPrefs() {
         return getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    private SharedPreferences getCapWebViewPrefs() {
+        return getContext().getSharedPreferences(CAP_WEBVIEW_PREFS, Context.MODE_PRIVATE);
     }
 
     // ──────────────────────────────────────────────
@@ -58,8 +65,8 @@ public class CapUpdatePlugin extends Plugin {
         String bundleId = call.getString("bundleId");
         String checksum = call.getString("checksum");
 
-        if (url == null || url.isEmpty()) {
-            call.reject("url is required");
+        if (url == null) {
+            call.reject("Must provide a download URL");
             return;
         }
 
@@ -79,88 +86,83 @@ public class CapUpdatePlugin extends Plugin {
     @PluginMethod
     public void setBundle(PluginCall call) {
         String bundleId = call.getString("bundleId");
-        Boolean immediate = call.getBoolean("immediate", false);
+        Boolean immediateObj = call.getBoolean("immediate");
+        boolean immediate = immediateObj != null && immediateObj;
 
-        if (bundleId == null || bundleId.isEmpty()) {
-            call.reject("bundleId is required");
+        if (bundleId == null) {
+            call.reject("Must provide a bundleId");
             return;
         }
 
-        String bundlePath = bundleManager.getBundlePath(bundleId);
-        if (bundlePath == null) {
-            call.reject("Bundle not found: " + bundleId);
-            return;
-        }
+        new Thread(() -> {
+            String bundlePath = bundleManager.getBundlePath(bundleId);
+            if (bundlePath != null) {
+                File rootDir = new File(bundlePath);
+                File webRoot = bundleManager.findWebRoot(rootDir);
+                String resolvedPath = (webRoot != null ? webRoot : rootDir).getAbsolutePath();
 
-        // Find the web root (directory containing index.html)
-        File rootDir = new File(bundlePath);
-        File webRoot = bundleManager.findWebRoot(rootDir);
-        if (webRoot == null) {
-            webRoot = rootDir;
-        }
+                // Save to our plugin preferences
+                getPrefs().edit()
+                        .putString(KEY_ACTIVE_BUNDLE, bundleId)
+                        .putString(KEY_ACTIVE_PATH, resolvedPath)
+                        .commit();
 
-        String resolvedPath = webRoot.getAbsolutePath();
+                // Save to Capacitor's built-in preferences so it loads on next cold start automatically
+                getCapWebViewPrefs().edit()
+                        .putString(CAP_SERVER_PATH, resolvedPath)
+                        .commit();
 
-        // Persist the active bundle
-        getPrefs().edit()
-                .putString(KEY_ACTIVE_BUNDLE, bundleId)
-                .putString(KEY_ACTIVE_PATH, resolvedPath)
-                .commit();
-
-        // Point Capacitor's built-in server to the new directory
-        getBridge().setServerBasePath(resolvedPath);
-
-        if (Boolean.TRUE.equals(immediate)) {
-            getBridge().reload();
-        }
-
-        call.resolve();
+                if (immediate) {
+                    getActivity().runOnUiThread(() -> {
+                        getBridge().setServerBasePath(resolvedPath);
+                        getBridge().reload();
+                    });
+                }
+                call.resolve();
+            } else {
+                call.reject("Bundle not found: " + bundleId);
+            }
+        }).start();
     }
 
     @PluginMethod
     public void getBundle(PluginCall call) {
-        String activeId = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
-
+        String activeBundle = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
         JSObject ret = new JSObject();
-        if (activeId != null) {
-            ret.put("bundleId", activeId);
-            ret.put("status", "active");
-        } else {
-            ret.put("bundleId", "built-in");
-            ret.put("status", "built-in");
-        }
+        ret.put("bundleId", activeBundle != null ? activeBundle : "built-in");
+        ret.put("status", activeBundle != null ? "active" : "built-in");
         call.resolve(ret);
     }
 
     @PluginMethod
     public void getBundles(PluginCall call) {
-        List<String> bundles = bundleManager.getBundleList();
-        String activeId = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
+        String activeBundle = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
+        JSArray bundles = new JSArray();
 
-        JSArray array = new JSArray();
-        for (String id : bundles) {
-            JSObject item = new JSObject();
-            item.put("bundleId", id);
-            item.put("status", id.equals(activeId) ? "active" : "downloaded");
-            array.put(item);
+        for (String bundleId : bundleManager.getBundleList()) {
+            JSObject bundle = new JSObject();
+            bundle.put("bundleId", bundleId);
+            bundle.put("status", bundleId.equals(activeBundle) ? "active" : "downloaded");
+            bundles.put(bundle);
         }
 
         JSObject ret = new JSObject();
-        ret.put("bundles", array);
+        ret.put("bundles", bundles);
         call.resolve(ret);
     }
 
     @PluginMethod
     public void deleteBundle(PluginCall call) {
         String bundleId = call.getString("bundleId");
-        if (bundleId == null || bundleId.isEmpty()) {
-            call.reject("bundleId is required");
+        String activeBundle = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
+
+        if (bundleId == null) {
+            call.reject("Must provide a bundleId");
             return;
         }
 
-        String activeId = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
-        if (bundleId.equals(activeId)) {
-            call.reject("Cannot delete the currently active bundle. Call reset() first.");
+        if (bundleId.equals(activeBundle)) {
+            call.reject("Cannot delete the active bundle");
             return;
         }
 
@@ -174,17 +176,17 @@ public class CapUpdatePlugin extends Plugin {
 
     @PluginMethod
     public void reset(PluginCall call) {
-        Boolean immediate = call.getBoolean("immediate", false);
+        Boolean immediateObj = call.getBoolean("immediate");
+        boolean immediate = immediateObj != null && immediateObj;
 
         clearActiveBundle();
 
-        // Reset Capacitor's server to serve from the default APK assets
-        getBridge().setServerAssetPath("public");
-
-        if (Boolean.TRUE.equals(immediate)) {
-            getBridge().reload();
+        if (immediate) {
+            getActivity().runOnUiThread(() -> {
+                getBridge().setServerBasePath("public");
+                getBridge().reload();
+            });
         }
-
         call.resolve();
     }
 
@@ -219,47 +221,51 @@ public class CapUpdatePlugin extends Plugin {
 
             // Extract bundle ID from server response
             JSObject latestBundle = data.getJSObject("latestBundle");
-            String bundleId = null;
-            if (latestBundle != null) {
-                bundleId = latestBundle.optString("id", null);
-            }
+            String bundleId = latestBundle != null ? latestBundle.optString("id", null) : null;
 
             final String finalBundleId = bundleId;
+            final JSObject finalLatestBundle = latestBundle;
 
             new Thread(() -> {
                 try {
                     String resolvedId = bundleManager.downloadAndExtract(downloadUrl, finalBundleId, null);
 
-                    // Apply the new bundle immediately
+                    // Resolve the web root path
                     String bundlePath = bundleManager.getBundlePath(resolvedId);
                     if (bundlePath != null) {
                         File rootDir = new File(bundlePath);
                         File webRoot = bundleManager.findWebRoot(rootDir);
-                        if (webRoot == null) {
-                            webRoot = rootDir;
-                        }
+                        String resolvedPath = (webRoot != null ? webRoot : rootDir).getAbsolutePath();
 
-                        String resolvedPath = webRoot.getAbsolutePath();
-
+                        // 1. Save to plugin prefs
                         getPrefs().edit()
                                 .putString(KEY_ACTIVE_BUNDLE, resolvedId)
                                 .putString(KEY_ACTIVE_PATH, resolvedPath)
                                 .commit();
 
+                        // 2. Save to Capacitor built-in prefs
+                        getCapWebViewPrefs().edit()
+                                .putString(CAP_SERVER_PATH, resolvedPath)
+                                .commit();
+
+                        // 3. Resolve the call BEFORE the bridge reloads
+                        // (Once the bridge reloads, this JS context is destroyed)
+                        JSObject ret = new JSObject();
+                        ret.put("updated", true);
+                        ret.put("latestBundle", finalLatestBundle);
+                        call.resolve(ret);
+
+                        // 4. Trigger reload on UI thread
                         getActivity().runOnUiThread(() -> {
                             getBridge().setServerBasePath(resolvedPath);
                             getBridge().reload();
                         });
-
-                        JSObject ret = new JSObject();
-                        ret.put("updated", true);
-                        ret.put("latestBundle", latestBundle);
-                        call.resolve(ret);
                     } else {
                         call.reject("Bundle downloaded but path not found");
                     }
                 } catch (Exception e) {
-                    call.reject("Sync failed: " + e.getMessage(), e);
+                    android.util.Log.e("CapUpdate", "Sync error: " + e.getMessage());
+                    call.reject("Sync failed: " + e.getMessage());
                 }
             }).start();
         });

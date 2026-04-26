@@ -27,16 +27,12 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
     // MARK: - Lifecycle
 
     override public func load() {
-        // Restore persisted bundle BEFORE the WebView loads its initial URL.
-        guard let persistedPath = defaults.string(forKey: Self.keyActivePath),
-              let persistedBundle = defaults.string(forKey: Self.keyActiveBundle) else {
+        guard let persistedPath = defaults.string(forKey: Self.keyActivePath) else {
             return
         }
 
         let dir = URL(fileURLWithPath: persistedPath)
-        if FileManager.default.fileExists(atPath: dir.path) {
-            bridge?.setServerBasePath(persistedPath)
-        } else {
+        if !FileManager.default.fileExists(atPath: dir.path) {
             // Bundle directory was deleted — clear stale prefs
             clearActiveBundle()
         }
@@ -87,6 +83,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
         // Persist
         defaults.set(bundleId, forKey: Self.keyActiveBundle)
         defaults.set(resolvedPath, forKey: Self.keyActivePath)
+        defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
 
         // Point Capacitor's built-in server to the new directory
         bridge?.setServerBasePath(resolvedPath)
@@ -207,6 +204,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
                     self.defaults.set(resolvedId, forKey: Self.keyActiveBundle)
                     self.defaults.set(resolvedPath, forKey: Self.keyActivePath)
+                    self.defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
 
                     DispatchQueue.main.async {
                         self.bridge?.setServerBasePath(resolvedPath)
@@ -231,6 +229,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
     private func clearActiveBundle() {
         defaults.removeObject(forKey: Self.keyActiveBundle)
         defaults.removeObject(forKey: Self.keyActivePath)
+        defaults.removeObject(forKey: "serverBasePath")
     }
 
     private func performUpdateCheck(call: CAPPluginCall, completion: @escaping ([String: Any]) -> Void) {
