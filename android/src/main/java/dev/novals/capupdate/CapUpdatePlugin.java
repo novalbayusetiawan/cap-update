@@ -183,7 +183,7 @@ public class CapUpdatePlugin extends Plugin {
 
         if (immediate) {
             getActivity().runOnUiThread(() -> {
-                getBridge().setServerBasePath("public");
+                getBridge().setServerAssetPath("public");
                 getBridge().reload();
             });
         }
