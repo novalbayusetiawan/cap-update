@@ -149,7 +149,8 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
         clearActiveBundle()
 
         // Reset Capacitor's server to default bundled assets
-        bridge?.setServerAssetPath("public")
+        let publicPath = Bundle.main.bundleURL.appendingPathComponent("public").path
+        bridge?.setServerBasePath(publicPath)
 
         if immediate {
             DispatchQueue.main.async {
