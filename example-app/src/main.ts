@@ -14,7 +14,7 @@ function log(msg: string) {
 function renderLogs() {
   const el = document.getElementById('logs');
   if (el) {
-    el.innerHTML = logs.map(l => `<div class="log-entry">${l}</div>`).join('');
+    el.innerHTML = logs.map((l) => `<div class="log-entry">${l}</div>`).join('');
   }
 }
 
@@ -36,7 +36,7 @@ async function handleGetBundles() {
       log('No bundles downloaded yet.');
     } else {
       log(`Found <strong>${bundles.length}</strong> bundle(s):`);
-      bundles.forEach(b => log(`  • ${b.bundleId} [${b.status}]`));
+      bundles.forEach((b) => log(`  • ${b.bundleId} [${b.status}]`));
     }
   } catch (e: any) {
     log(`❌ getBundles error: ${e.message}`);
@@ -167,7 +167,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="container">
     <header>
       <div class="header-icon">⚡</div>
-      <h1>Cap Update v1.0</h1>
+      <h1>Cap Update v0.0.1</h1>
       <p class="subtitle">Live OTA Bundle Manager</p>
     </header>
 
