@@ -6,9 +6,7 @@ on:
 jobs:
   upload-file:
     runs-on: ubuntu-latest
-    env:
-      # Add your environment variables here
-      NODE_ENV: production
+    # Global env removed to allow devDependencies install
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -16,12 +14,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install dependencies
+      - name: Install root dependencies
+        run: npm install
+      - name: Install example-app dependencies
         run: npm install
         working-directory: ./example-app
       - name: Build web assets
         run: npm run build
         working-directory: ./example-app
+        env:
+          NODE_ENV: production
       - name: Upload Live Update
         run: |
           npx laracap-cli apps:bundles:create \
