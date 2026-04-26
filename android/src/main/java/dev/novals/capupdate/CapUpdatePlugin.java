@@ -220,8 +220,8 @@ public class CapUpdatePlugin extends Plugin {
             // Extract bundle ID from server response
             JSObject latestBundle = data.getJSObject("latestBundle");
             String bundleId = null;
-            if (latestBundle != null && latestBundle.has("id")) {
-                bundleId = String.valueOf(latestBundle.get("id"));
+            if (latestBundle != null) {
+                bundleId = latestBundle.optString("id", null);
             }
 
             final String finalBundleId = bundleId;
