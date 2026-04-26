@@ -2,7 +2,7 @@ name: Deploy Live Update
 on:
   push:
     branches:
-      - native
+      - main
 jobs:
   upload-file:
     runs-on: ubuntu-latest
