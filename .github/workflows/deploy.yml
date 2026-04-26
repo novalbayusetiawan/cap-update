@@ -18,8 +18,10 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         run: npm install
+        working-directory: ./example-app
       - name: Build web assets
         run: npm run build
+        working-directory: ./example-app
       - name: Upload Live Update
         run: |
           npx laracap-cli apps:bundles:create \
