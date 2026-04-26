@@ -1,6 +1,6 @@
 {
   "name": "cap-update",
-  "version": "0.0.1",
+  "version": "7.0.0",
   "description": "Capacitor native plugin for over-the-air (OTA) live bundle updates using Bridge.setServerBasePath — no local HTTP server needed.",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
