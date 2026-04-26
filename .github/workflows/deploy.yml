@@ -26,8 +26,8 @@ jobs:
         run: |
           npx laracap-cli apps:bundles:create \
             --path ${{ github.workspace }}/example-app/dist \
-            --server https://laracap.dev \
+            --server "${{ secrets.LARACAP_SERVER_URL }}" \
             --token "${{ secrets.LARACAP_TOKEN }}" \
-            --app-id 019db3fe-d545-7c8c-aa13-26f647903164 \
+            --app-id 019dc873-ec06-7274-a7ee-59afd76c88e3 \
             --name "${{ github.ref }}" \
-            --channel production
+            --channel beta
