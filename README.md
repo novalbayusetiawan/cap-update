@@ -1,27 +1,30 @@
-# ⚡ Cap Update
+A lightweight, secure, and high-performance **Over-The-Air (OTA) live update** solution for Capacitor apps. Download, manage, and apply web bundle updates at runtime without rebuilding or resubmitting your app.
 
-A Capacitor native plugin for **over-the-air (OTA) live updates**. Download, manage, and apply web bundle updates at runtime — without rebuilding or resubmitting your app.
-
-Uses Capacitor's built-in `Bridge.setServerBasePath()` API to swap web assets. **No local HTTP server**, no port conflicts, no cleartext traffic — just native file serving through Capacitor's own engine.
+Cap Update leverages Capacitor's native engine to serve web assets directly. This ensures maximum performance, zero port conflicts, and full compatibility with all your existing plugins.
 
 [![npm](https://img.shields.io/npm/v/cap-update)](https://www.npmjs.com/package/cap-update)
-[![Capacitor](https://img.shields.io/badge/capacitor-v7+-blue)](https://capacitorjs.com)
+[![Capacitor](https://img.shields.io/badge/capacitor-v8-blue)](https://capacitorjs.com)
 
 ---
 
-## Why Cap Update?
+## Key Features & Benefits
 
-| Feature | Cap Update | Local HTTP Server Approach |
-|---|---|---|
-| **Dependencies** | None (uses Capacitor Bridge) | NanoHTTPD / GCDWebServer |
-| **Port conflicts** | Impossible | Risk of port in use |
-| **HTTPS** | Default `https://localhost` | Needs cleartext `http://` |
-| **Plugin compat** | All Capacitor plugins work | May break (different origin) |
-| **App Store** | No extra review flags | Embedded server may flag |
-| **Complexity** | Minimal | Server lifecycle management |
+- 🚀 **Native Performance**: Uses Capacitor's built-in `Bridge.setServerBasePath()` API. No local HTTP server, no extra overhead.
+- 🔒 **Secure by Design**: Maintains the `https://localhost` origin. No cleartext traffic issues or CORS headaches.
+- 🛠️ **Seamless Integration**: Fully compatible with all Capacitor plugins since it uses the standard platform engine.
+- 📦 **Atomic Updates**: Bundles are downloaded and extracted in the background, ready to be applied instantly or on the next restart.
+- 🛡️ **App Store Friendly**: Uses standard APIs that don't trigger "embedded server" flags during review.
+- 🪶 **Zero Dependencies**: Lightweight footprint on both iOS and Android.
 
 ---
+## Compatibility
 
+| Plugin Version | Capacitor Version | Status     |
+| -------------- | ----------------- | ---------- |
+| 8.0.x          | >=8.x.x           | Supported  |
+| 7.0.x          | 7.x.x             | Supported  |
+
+---
 ## Install
 
 ```bash
@@ -295,16 +298,6 @@ interface CheckUpdateResult {
 4. **Reload** — WebView reloads, now serving the updated assets
 
 No secondary HTTP server. No port management. Just Capacitor doing what it already does — serving files — from a different folder.
-
----
-
-## Compatibility
-
-| Platform | Supported |
-|---|---|
-| Android | ✅ Capacitor 7+ |
-| iOS | ✅ Capacitor 7+ |
-| Web | ⚠️ No-op (logs warnings) |
 
 ---
 
