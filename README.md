@@ -5,7 +5,7 @@ A Capacitor native plugin for **over-the-air (OTA) live updates**. Download, man
 Uses Capacitor's built-in `Bridge.setServerBasePath()` API to swap web assets. **No local HTTP server**, no port conflicts, no cleartext traffic — just native file serving through Capacitor's own engine.
 
 [![npm](https://img.shields.io/npm/v/cap-update)](https://www.npmjs.com/package/cap-update)
-[![Capacitor](https://img.shields.io/badge/capacitor-v7+-blue)](https://capacitorjs.com)
+[![Capacitor](https://img.shields.io/badge/capacitor-v8+-blue)](https://capacitorjs.com)
 
 ---
 
@@ -302,8 +302,8 @@ No secondary HTTP server. No port management. Just Capacitor doing what it alrea
 
 | Platform | Supported |
 |---|---|
-| Android | ✅ Capacitor 7+ |
-| iOS | ✅ Capacitor 7+ |
+| Android | ✅ Capacitor 8+ |
+| iOS | ✅ Capacitor 8+ |
 | Web | ⚠️ No-op (logs warnings) |
 
 ---
