@@ -284,7 +284,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </section>
 
     <footer>
-      <p>cap-update v0.0.1 • Capacitor v7+</p>
+      <p>cap-update v8.0.3 • Capacitor v8+</p>
     </footer>
   </div>
 `;
