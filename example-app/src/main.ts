@@ -32,6 +32,60 @@ async function handleGetBundle() {
 async function handleGetBundles() {
   try {
     const { bundles } = await CapUpdate.getBundles();
+    const listEl = document.getElementById('bundles-list');
+    if (listEl) {
+      if (bundles.length === 0) {
+        listEl.innerHTML = '<div style="font-size: 13px; color: var(--text-muted); padding: 8px 0;">No bundles downloaded yet.</div>';
+      } else {
+        listEl.innerHTML = bundles.map((b) => `
+          <div class="bundle-item" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;">
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 13px; font-weight: 500; color: ${b.status === 'active' ? 'var(--success)' : 'var(--text)'};">
+                ${b.bundleId} ${b.status === 'active' ? '●' : ''}
+              </span>
+              <span style="font-size: 11px; color: var(--text-muted);">${b.status}</span>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              ${b.status !== 'active' ? `<button class="btn-activate-pkg" data-id="${b.bundleId}" style="padding: 4px 8px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-hover); color: var(--text); cursor: pointer;">Activate</button>` : ''}
+              ${b.status !== 'active' ? `<button class="btn-delete-pkg" data-id="${b.bundleId}" style="padding: 4px 8px; font-size: 11px; border: 1px solid var(--danger); border-radius: 6px; background: var(--danger); color: white; cursor: pointer;">Delete</button>` : ''}
+            </div>
+          </div>
+        `).join('');
+
+        // Add event listeners to activate buttons
+        listEl.querySelectorAll('.btn-activate-pkg').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+            if (id) {
+              log(`🔄 Setting bundle: ${id}...`);
+              try {
+                await CapUpdate.setBundle({ bundleId: id, immediate: true });
+                log(`✅ Bundle set and reloading.`);
+              } catch (err: any) {
+                log(`❌ setBundle error: ${err.message}`);
+              }
+            }
+          });
+        });
+
+        // Add event listeners to delete buttons
+        listEl.querySelectorAll('.btn-delete-pkg').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+            if (id) {
+              try {
+                await CapUpdate.deleteBundle({ bundleId: id });
+                log(`🗑️ Deleted: ${id}`);
+                handleGetBundles(); // refresh list
+              } catch (err: any) {
+                log(`❌ deleteBundle error: ${err.message}`);
+              }
+            }
+          });
+        });
+      }
+    }
+
     if (bundles.length === 0) {
       log('No bundles downloaded yet.');
     } else {
@@ -167,17 +221,18 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="container">
     <header>
       <div class="header-icon">⚡</div>
-      <h1>Cap Update v8.0.0</h1>
+      <h1>Cap Update v8.0.3</h1>
       <p class="subtitle">Live OTA Bundle Manager</p>
     </header>
 
     <!-- Current Bundle -->
     <section class="card">
       <h2>📦 Current Bundle</h2>
-      <div class="btn-row">
+      <div class="btn-row" style="margin-bottom: 12px;">
         <button id="btn-get-bundle" class="btn primary">Get Bundle</button>
         <button id="btn-get-bundles" class="btn">List All</button>
       </div>
+      <div id="bundles-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
     </section>
 
     <!-- Download Bundle -->
@@ -248,3 +303,4 @@ document.getElementById('btn-check')!.addEventListener('click', handleCheckUpdat
 // ── Init ──
 log('App loaded. Ready to manage bundles.');
 handleGetBundle();
+handleGetBundles();

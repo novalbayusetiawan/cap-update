@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "CapUpdate",
-    platforms: [.iOS(.v15)],
+    platforms: [.iOS(.v15_5)],
     products: [
         .library(
             name: "CapUpdate",

@@ -19,6 +19,7 @@ public class CapUpdatePlugin extends Plugin {
     private static final String PREFS_NAME = "cap_update_prefs";
     private static final String KEY_ACTIVE_BUNDLE = "active_bundle_id";
     private static final String KEY_ACTIVE_PATH = "active_bundle_path";
+    private static final String KEY_CHANNEL_BUNDLES_PREFIX = "channel_bundle_";
 
     // Capacitor's built-in preferences for the WebView
     private static final String CAP_WEBVIEW_PREFS = "CapWebViewSettings";
@@ -202,7 +203,21 @@ public class CapUpdatePlugin extends Plugin {
 
     @PluginMethod
     public void checkForUpdate(PluginCall call) {
-        performUpdateCheck(call, (result) -> call.resolve(result));
+        performUpdateCheck(call, (result) -> {
+            String channel = call.getString("channel", "production");
+            JSObject latestBundle = result.getJSObject("latestBundle");
+            String bundleId = latestBundle != null ? latestBundle.optString("id", null) : null;
+            if (bundleId != null) {
+                Boolean isUpdate = result.getBool("isUpdateAvailable");
+                boolean isUpdateAvailable = isUpdate != null && isUpdate;
+                if (!isUpdateAvailable) {
+                    getPrefs().edit()
+                            .putString(KEY_CHANNEL_BUNDLES_PREFIX + channel, bundleId)
+                            .apply();
+                }
+            }
+            call.resolve(result);
+        });
     }
 
     @PluginMethod
@@ -211,29 +226,83 @@ public class CapUpdatePlugin extends Plugin {
             Boolean isUpdate = data.getBool("isUpdateAvailable");
             boolean isUpdateAvailable = isUpdate != null && isUpdate;
             String downloadUrl = data.getString("downloadUrl");
+            String channel = call.getString("channel", "production");
 
-            if (!isUpdateAvailable || downloadUrl == null) {
+            // Extract bundle ID from server response
+            JSObject latestBundle = data.getJSObject("latestBundle");
+            String bundleId = latestBundle != null ? latestBundle.optString("id", null) : null;
+
+            if (bundleId == null) {
                 JSObject ret = new JSObject();
                 ret.put("updated", false);
                 call.resolve(ret);
                 return;
             }
 
-            // Extract bundle ID from server response
-            JSObject latestBundle = data.getJSObject("latestBundle");
-            String bundleId = latestBundle != null ? latestBundle.optString("id", null) : null;
-
             final String finalBundleId = bundleId;
             final JSObject finalLatestBundle = latestBundle;
+
+            String activeBundle = getPrefs().getString(KEY_ACTIVE_BUNDLE, null);
+            boolean needsUpdate = isUpdateAvailable;
+            boolean needsChannelSwitch = !finalBundleId.equals(activeBundle);
+
+            if (!needsUpdate && !needsChannelSwitch) {
+                JSObject ret = new JSObject();
+                ret.put("updated", false);
+                call.resolve(ret);
+                return;
+            }
+
+            // Check if the bundle is already downloaded on disk.
+            String bundlePath = bundleManager.getBundlePath(finalBundleId);
+            if (bundlePath != null) {
+                new Thread(() -> {
+                    File rootDir = new File(bundlePath);
+                    File webRoot = bundleManager.findWebRoot(rootDir);
+                    String resolvedPath = (webRoot != null ? webRoot : rootDir).getAbsolutePath();
+
+                    // 1. Save to plugin prefs
+                    getPrefs().edit()
+                            .putString(KEY_ACTIVE_BUNDLE, finalBundleId)
+                            .putString(KEY_ACTIVE_PATH, resolvedPath)
+                            .putString(KEY_CHANNEL_BUNDLES_PREFIX + channel, finalBundleId)
+                            .commit();
+
+                    // 2. Save to Capacitor built-in prefs
+                    getCapWebViewPrefs().edit()
+                            .putString(CAP_SERVER_PATH, resolvedPath)
+                            .commit();
+
+                    // 3. Resolve the call BEFORE the bridge reloads
+                    JSObject ret = new JSObject();
+                    ret.put("updated", true);
+                    ret.put("latestBundle", finalLatestBundle);
+                    call.resolve(ret);
+
+                    // 4. Trigger reload on UI thread
+                    getActivity().runOnUiThread(() -> {
+                        getBridge().setServerBasePath(resolvedPath);
+                        getBridge().reload();
+                    });
+                }).start();
+                return;
+            }
+
+            if (downloadUrl == null) {
+                JSObject ret = new JSObject();
+                ret.put("updated", false);
+                call.resolve(ret);
+                return;
+            }
 
             new Thread(() -> {
                 try {
                     String resolvedId = bundleManager.downloadAndExtract(downloadUrl, finalBundleId, null);
 
                     // Resolve the web root path
-                    String bundlePath = bundleManager.getBundlePath(resolvedId);
-                    if (bundlePath != null) {
-                        File rootDir = new File(bundlePath);
+                    String downloadedBundlePath = bundleManager.getBundlePath(resolvedId);
+                    if (downloadedBundlePath != null) {
+                        File rootDir = new File(downloadedBundlePath);
                         File webRoot = bundleManager.findWebRoot(rootDir);
                         String resolvedPath = (webRoot != null ? webRoot : rootDir).getAbsolutePath();
 
@@ -241,6 +310,7 @@ public class CapUpdatePlugin extends Plugin {
                         getPrefs().edit()
                                 .putString(KEY_ACTIVE_BUNDLE, resolvedId)
                                 .putString(KEY_ACTIVE_PATH, resolvedPath)
+                                .putString(KEY_CHANNEL_BUNDLES_PREFIX + channel, resolvedId)
                                 .commit();
 
                         // 2. Save to Capacitor built-in prefs
@@ -249,7 +319,6 @@ public class CapUpdatePlugin extends Plugin {
                                 .commit();
 
                         // 3. Resolve the call BEFORE the bridge reloads
-                        // (Once the bridge reloads, this JS context is destroyed)
                         JSObject ret = new JSObject();
                         ret.put("updated", true);
                         ret.put("latestBundle", finalLatestBundle);
@@ -301,6 +370,9 @@ public class CapUpdatePlugin extends Plugin {
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
 
+                // Get channel-specific bundle ID
+                String channelBundleId = getPrefs().getString(KEY_CHANNEL_BUNDLES_PREFIX + channel, "");
+
                 // Send device metadata headers
                 String deviceId = android.provider.Settings.Secure.getString(
                         getContext().getContentResolver(),
@@ -309,6 +381,7 @@ public class CapUpdatePlugin extends Plugin {
                 conn.setRequestProperty("X-Device-Identifier", deviceId != null ? deviceId : "unknown");
                 conn.setRequestProperty("X-Platform", "android");
                 conn.setRequestProperty("X-Bundle-Id", getPrefs().getString(KEY_ACTIVE_BUNDLE, ""));
+                conn.setRequestProperty("X-Channel-Bundle-Id", channelBundleId);
                 conn.setRequestProperty("X-Channel", channel);
 
                 int responseCode = conn.getResponseCode();

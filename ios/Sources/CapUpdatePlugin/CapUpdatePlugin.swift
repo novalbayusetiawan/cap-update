@@ -23,6 +23,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private static let keyActiveBundle = "cap_update_active_bundle_id"
     private static let keyActivePath = "cap_update_active_bundle_path"
+    private static let keyChannelBundles = "cap_update_channel_bundles"
 
     // MARK: - Lifecycle
 
@@ -172,6 +173,18 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func checkForUpdate(_ call: CAPPluginCall) {
         performUpdateCheck(call: call) { result in
+            let channel = call.getString("channel") ?? "production"
+            if let latestBundle = result["latestBundle"] as? [String: Any],
+               let bundleId = latestBundle["id"].flatMap({ "\($0)" }) {
+                let isUpdateAvailable = result["isUpdateAvailable"] as? Bool ?? false
+                // If the server reports no update, it means our X-Channel-Bundle-Id is correct.
+                // We make sure it's stored in the channel mapping in case it wasn't.
+                if !isUpdateAvailable {
+                    var channelBundles = self.defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] ?? [:]
+                    channelBundles[channel] = bundleId
+                    self.defaults.set(channelBundles, forKey: Self.keyChannelBundles)
+                }
+            }
             call.resolve(result)
         }
     }
@@ -179,22 +192,65 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func sync(_ call: CAPPluginCall) {
         performUpdateCheck(call: call) { data in
             let isUpdateAvailable = data["isUpdateAvailable"] as? Bool ?? false
-            guard isUpdateAvailable, let downloadUrl = data["downloadUrl"] as? String else {
+            let latestBundle = data["latestBundle"] as? [String: Any]
+            let bundleId = latestBundle?["id"].flatMap { "\($0)" }
+            let channel = call.getString("channel") ?? "production"
+
+            guard let resolvedId = bundleId else {
                 call.resolve(["updated": false])
                 return
             }
 
-            // Extract bundle ID from server response
-            let latestBundle = data["latestBundle"] as? [String: Any]
-            let bundleId = latestBundle?["id"].flatMap { "\($0)" }
+            let activeId = self.defaults.string(forKey: Self.keyActiveBundle)
+            let needsUpdate = isUpdateAvailable
+            let needsChannelSwitch = (activeId != resolvedId)
+
+            if !needsUpdate && !needsChannelSwitch {
+                call.resolve(["updated": false])
+                return
+            }
+
+            // Check if the bundle is already downloaded on disk.
+            if let bundlePath = self.bundleManager.getBundlePath(bundleId: resolvedId) {
+                // Already downloaded! We can just switch to it.
+                let rootUrl = URL(fileURLWithPath: bundlePath)
+                let webRoot = self.bundleManager.findWebRoot(dir: rootUrl) ?? rootUrl
+                let resolvedPath = webRoot.path
+
+                self.defaults.set(resolvedId, forKey: Self.keyActiveBundle)
+                self.defaults.set(resolvedPath, forKey: Self.keyActivePath)
+                self.defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
+
+                var channelBundles = self.defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] ?? [:]
+                channelBundles[channel] = resolvedId
+                self.defaults.set(channelBundles, forKey: Self.keyChannelBundles)
+
+                DispatchQueue.main.async {
+                    self.bridge?.setServerBasePath(resolvedPath)
+                    self.bridge?.webView?.reload()
+                }
+
+                var result: [String: Any] = ["updated": true]
+                if let bundle = latestBundle {
+                    result["latestBundle"] = bundle
+                }
+                call.resolve(result)
+                return
+            }
+
+            // Not downloaded, we need to download it.
+            guard let downloadUrl = data["downloadUrl"] as? String else {
+                call.resolve(["updated": false])
+                return
+            }
 
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let resolvedId = try self.bundleManager.downloadAndExtract(
-                        urlString: downloadUrl, bundleId: bundleId, checksum: nil
+                    let downloadedId = try self.bundleManager.downloadAndExtract(
+                        urlString: downloadUrl, bundleId: resolvedId, checksum: nil
                     )
 
-                    guard let bundlePath = self.bundleManager.getBundlePath(bundleId: resolvedId) else {
+                    guard let bundlePath = self.bundleManager.getBundlePath(bundleId: downloadedId) else {
                         call.reject("Bundle downloaded but path not found")
                         return
                     }
@@ -203,9 +259,13 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
                     let webRoot = self.bundleManager.findWebRoot(dir: rootUrl) ?? rootUrl
                     let resolvedPath = webRoot.path
 
-                    self.defaults.set(resolvedId, forKey: Self.keyActiveBundle)
+                    self.defaults.set(downloadedId, forKey: Self.keyActiveBundle)
                     self.defaults.set(resolvedPath, forKey: Self.keyActivePath)
                     self.defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
+
+                    var channelBundles = self.defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] ?? [:]
+                    channelBundles[channel] = downloadedId
+                    self.defaults.set(channelBundles, forKey: Self.keyChannelBundles)
 
                     DispatchQueue.main.async {
                         self.bridge?.setServerBasePath(resolvedPath)
@@ -245,6 +305,11 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
+        var channelBundleId = ""
+        if let channelBundles = defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] {
+            channelBundleId = channelBundles[channel] ?? ""
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 30
@@ -254,6 +319,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
         request.addValue(deviceId, forHTTPHeaderField: "X-Device-Identifier")
         request.addValue("ios", forHTTPHeaderField: "X-Platform")
         request.addValue(defaults.string(forKey: Self.keyActiveBundle) ?? "", forHTTPHeaderField: "X-Bundle-Id")
+        request.addValue(channelBundleId, forHTTPHeaderField: "X-Channel-Bundle-Id")
         request.addValue(channel, forHTTPHeaderField: "X-Channel")
 
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
