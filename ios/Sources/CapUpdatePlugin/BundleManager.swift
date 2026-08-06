@@ -1,6 +1,10 @@
 import CommonCrypto
 import Foundation
+#if SWIFT_PACKAGE
+import ZipArchive
+#else
 import SSZipArchive
+#endif
 
 /// Manages downloading, extracting, and tracking OTA bundles on the filesystem.
 public class BundleManager {

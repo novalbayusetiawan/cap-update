@@ -33,9 +33,13 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let dir = URL(fileURLWithPath: persistedPath)
-        if !FileManager.default.fileExists(atPath: dir.path) {
-            // Bundle directory was deleted — clear stale prefs
+        guard FileManager.default.fileExists(atPath: dir.path) else {
             clearActiveBundle()
+            return
+        }
+
+        DispatchQueue.main.async {
+            self.applyServerBasePath(persistedPath, reload: true)
         }
     }
 
@@ -84,16 +88,9 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
         // Persist
         defaults.set(bundleId, forKey: Self.keyActiveBundle)
         defaults.set(resolvedPath, forKey: Self.keyActivePath)
-        defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
 
         // Point Capacitor's built-in server to the new directory
-        bridge?.setServerBasePath(resolvedPath)
-
-        if immediate {
-            DispatchQueue.main.async {
-                self.bridge?.webView?.reload()
-            }
-        }
+        applyServerBasePath(resolvedPath, reload: immediate)
 
         call.resolve()
     }
@@ -151,13 +148,7 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
         // Reset Capacitor's server to default bundled assets
         let publicPath = Bundle.main.bundleURL.appendingPathComponent("public").path
-        bridge?.setServerBasePath(publicPath)
-
-        if immediate {
-            DispatchQueue.main.async {
-                self.bridge?.webView?.reload()
-            }
-        }
+        applyServerBasePath(publicPath, reload: immediate)
 
         call.resolve()
     }
@@ -219,15 +210,13 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
                 self.defaults.set(resolvedId, forKey: Self.keyActiveBundle)
                 self.defaults.set(resolvedPath, forKey: Self.keyActivePath)
-                self.defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
 
                 var channelBundles = self.defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] ?? [:]
                 channelBundles[channel] = resolvedId
                 self.defaults.set(channelBundles, forKey: Self.keyChannelBundles)
 
                 DispatchQueue.main.async {
-                    self.bridge?.setServerBasePath(resolvedPath)
-                    self.bridge?.webView?.reload()
+                    self.applyServerBasePath(resolvedPath, reload: true)
                 }
 
                 var result: [String: Any] = ["updated": true]
@@ -261,15 +250,13 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
                     self.defaults.set(downloadedId, forKey: Self.keyActiveBundle)
                     self.defaults.set(resolvedPath, forKey: Self.keyActivePath)
-                    self.defaults.set(resolvedPath, forKey: "serverBasePath") // Native Capacitor iOS hook
 
                     var channelBundles = self.defaults.dictionary(forKey: Self.keyChannelBundles) as? [String: String] ?? [:]
                     channelBundles[channel] = downloadedId
                     self.defaults.set(channelBundles, forKey: Self.keyChannelBundles)
 
                     DispatchQueue.main.async {
-                        self.bridge?.setServerBasePath(resolvedPath)
-                        self.bridge?.webView?.reload()
+                        self.applyServerBasePath(resolvedPath, reload: true)
                     }
 
                     var result: [String: Any] = ["updated": true]
@@ -287,10 +274,26 @@ public class CapUpdatePlugin: CAPPlugin, CAPBridgedPlugin {
 
     // MARK: - Private Helpers
 
+    /// Applies a custom server base path. When reloading, uses `CAPBridgeViewController`
+    /// to match Capacitor 8's built-in WebView plugin. When not reloading, only updates
+    /// the bridge asset path; the path is restored on cold start via `load()`.
+    private func applyServerBasePath(_ path: String, reload: Bool) {
+        if reload, let viewController = bridge?.viewController as? CAPBridgeViewController {
+            viewController.setServerBasePath(path: path)
+            return
+        }
+
+        bridge?.setServerBasePath(path)
+        if reload {
+            DispatchQueue.main.async {
+                self.bridge?.webView?.reload()
+            }
+        }
+    }
+
     private func clearActiveBundle() {
         defaults.removeObject(forKey: Self.keyActiveBundle)
         defaults.removeObject(forKey: Self.keyActivePath)
-        defaults.removeObject(forKey: "serverBasePath")
     }
 
     private func performUpdateCheck(call: CAPPluginCall, completion: @escaping ([String: Any]) -> Void) {

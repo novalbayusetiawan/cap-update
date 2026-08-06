@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "CapUpdate",
-    platforms: [.iOS(.v15_5)],
+    platforms: [.iOS(.v15)],
     products: [
         .library(
             name: "CapUpdate",
@@ -11,7 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0"),
-        .package(url: "https://github.com/ZipArchive/ZipArchive.git", from: "2.5.0")
+        .package(url: "https://github.com/ZipArchive/ZipArchive.git", "2.4.0"..<"2.5.0")
     ],
     targets: [
         .target(
